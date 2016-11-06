@@ -1,30 +1,40 @@
 import sys
 import numpy as np
+from scipy import spatial
 from keras.models import Sequential
 from keras.layers import Dense, TimeDistributed, Dropout, Activation
 from keras.layers import Embedding, LSTM
 from keras.optimizers import RMSprop
 #from seq2seq.models import SimpleSeq2Seq
+from gensim import models, matutils
 
-def read_data(file_path, max_len = 20):
-    vocabs = set()
-    with open(file_path, "r") as f:
-        for line in f:
-            tokens = line.strip().split()
-            for token in tokens:
-                vocabs.add(token)
-    voc_index = {voc:i for i,voc in enumerate(list(vocabs))}
+#w2v_model = None
+
+def read_data(file_path, max_len=20):
     X = []
+    sentences = []
     with open(file_path, "r") as f:
         for line in f:
+            # word2vec dimension = 300
+            x = np.zeros((max_len, 300))
+            sentence = []
             tokens = line.strip().split()
-            x = np.zeros((max_len, len(voc_index))) #one hot encoding -> replaced by word vectors?
-            for i, token in enumerate(tokens):
-                if i >= max_len:
+            index = 0
+            for token in tokens:
+                try:
+                    token.encode('ascii')
+                except UnicodeEncodeError:
+                    continue
+
+                if token in w2v_model:
+                    x[index] = w2v_model[token]
+                    index += 1
+                    sentence.append(token)
+                if index >= 20:
                     break
-                x[i,voc_index[token]] = 1
             X.append(x)
-    return np.array(X), voc_index
+            sentences.append(sentence)
+    return np.array(X), 300, sentences
 
 def build_generative_model(input_dim, max_len = 20):
     G = Sequential()
@@ -54,31 +64,65 @@ def build_GAN(G, D):
     return model
 
 def generate_noise(shape):
-    X = []
-    for i in range(shape[0]):
-        x = np.zeros((shape[1], shape[2]))
-        for j in range(shape[1]):
-           x[j, np.random.randint(shape[2])] = 1
-        X.append(x)
-    return np.array(X)
-    #return np.random.uniform(size = shape)
+    return np.random.uniform(size = shape)
     # 1. Should only have only one 1 in each row?
     # 2. Should use Gussian noise?
 
+def find_nearest_vocab(sentences, gen_X):
+    print "Shape(gen_X): ", gen_X.shape
+    print "# sentences: ", len(sentences)
+
+    gen_sentences = []
+
+    for sentence, gen_x in zip(sentences, gen_X):
+        gen_tokens = []
+        for token, token_vec in zip(sentence, gen_x):
+            nearest = w2v_model.most_similar(positive=[token], topn=10000)
+            index = -1
+            min_dist = 100000
+            for i, nbr in enumerate(nearest):
+                try:
+                    nbr[0].encode('ascii')
+                except UnicodeEncodeError:
+                    continue
+                d = spatial.distance.cosine(token_vec, w2v_model[nbr[0]])
+#                print d
+                if d < min_dist:
+                    index = i
+                    min_dist = d
+            if index == -1:
+                gen_tokens.append('')
+            else:
+                gen_tokens.append(nearest[index][0])
+            # distances = [spatial.distance.cosine(token_vec, w2v_model[nbr]) for nbr, foo in nearest]
+            # gen_tokens.append(nearest[distances.index(min(distances))][0])
+        print ' '.join(gen_tokens)
+        gen_sentences.append(' '.join(gen_tokens))
+
+    return gen_sentences
+        
+
 if __name__ == "__main__":
-    X, voc_index = read_data(sys.argv[1])
-    G = build_generative_model(len(voc_index))
-    D = build_discriminative_model(len(voc_index))
+    #w2v_model = models.Word2Vec.load_word2vec_format('../GoogleNews-vectors-negative300.bin', binary=True)
+    print "Finish loading word2vec model"
+    X, dimension, sentences = read_data("data/data.txt")
+    G = build_generative_model(dimension)
+    D = build_discriminative_model(dimension)
     model = build_GAN(G, D)
-    G.compile(loss = "categorical_crossentropy", optimizer = RMSprop(lr = 0.0001))
-    model.compile(loss = "binary_crossentropy", optimizer = RMSprop(lr = 0.0001))
+    G.compile(loss = "categorical_crossentropy", optimizer = RMSprop(lr=0.0001))
+    model.compile(loss = "binary_crossentropy", optimizer = RMSprop(lr=0.0001))
     D.trainable = True
-    D.compile(loss = "binary_crossentropy", optimizer = RMSprop(lr = 0.0001))
-    for epoch in range(100):
+    D.compile(loss = "binary_crossentropy", optimizer = RMSprop(lr=0.0001))
+    for epoch in range(10):
         print "==========Epoch %d===========" % epoch
         Y = [1]*len(X) + [0]*len(X) 
         noise = generate_noise(X.shape)
         gen_X = G.predict(noise)
+        
+        gen_sentences = find_nearest_vocab(sentences[:2], gen_X[:2])
+        #for gen_sentence in gen_sentences:
+        #    print gen_sentence
+
         combined_X = np.concatenate((X, gen_X))
         d_loss = D.train_on_batch(combined_X, Y)
         D.trainable = False
