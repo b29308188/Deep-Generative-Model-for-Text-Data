@@ -9,6 +9,7 @@ from keras.optimizers import RMSprop
 from gensim import models, matutils
 
 #w2v_model = None
+#w2v_model download path: https://drive.google.com/file/d/0B7XkCwpI5KDYNlNUTTlSS21pQmM/edit
 
 def read_data(file_path, max_len=20):
     X = []
