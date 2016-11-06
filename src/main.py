@@ -3,6 +3,7 @@ import numpy as np
 from keras.models import Sequential
 from keras.layers import Dense, TimeDistributed, Dropout, Activation
 from keras.layers import Embedding, LSTM
+from keras.optimizers import RMSprop
 #from seq2seq.models import SimpleSeq2Seq
 
 def read_data(file_path, max_len = 20):
@@ -40,7 +41,7 @@ def build_discriminative_model(input_dim, max_len = 20):
     D.add(LSTM(128, input_dim = input_dim, input_length = max_len, return_sequences = False))
     D.add(Dropout(0.25))
     D.add(Dense(1))
-    D.add(Activation("tanh"))
+    D.add(Activation("relu"))
     #print G.summary()
     return D
 
@@ -53,7 +54,14 @@ def build_GAN(G, D):
     return model
 
 def generate_noise(shape):
-    return np.random.uniform(size = shape)
+    X = []
+    for i in range(shape[0]):
+        x = np.zeros((shape[1], shape[2]))
+        for j in range(shape[1]):
+           x[j, np.random.randint(shape[2])] = 1
+        X.append(x)
+    return np.array(X)
+    #return np.random.uniform(size = shape)
     # 1. Should only have only one 1 in each row?
     # 2. Should use Gussian noise?
 
@@ -62,11 +70,11 @@ if __name__ == "__main__":
     G = build_generative_model(len(voc_index))
     D = build_discriminative_model(len(voc_index))
     model = build_GAN(G, D)
-    G.compile(loss = "categorical_crossentropy", optimizer = "rmsprop")
-    model.compile(loss = "binary_crossentropy", optimizer = "rmsprop")
+    G.compile(loss = "categorical_crossentropy", optimizer = RMSprop(lr = 0.0001))
+    model.compile(loss = "binary_crossentropy", optimizer = RMSprop(lr = 0.0001))
     D.trainable = True
-    D.compile(loss = "binary_crossentropy", optimizer = "rmsprop")
-    for epoch in range(10):
+    D.compile(loss = "binary_crossentropy", optimizer = RMSprop(lr = 0.0001))
+    for epoch in range(100):
         print "==========Epoch %d===========" % epoch
         Y = [1]*len(X) + [0]*len(X) 
         noise = generate_noise(X.shape)
