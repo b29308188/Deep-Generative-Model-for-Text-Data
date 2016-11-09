@@ -17,13 +17,12 @@ def normalize(word):
 	word = word.lower()
 	return word
 
-def read_data(file_path, max_len = 30):
+def read_data(file_path, max_len = 30, dimension = 300):
 	X = []
 	sentences = []
 	with open(file_path, "r") as f:
 		for line in f:
-			# word2vec dimension = 300
-			x = np.zeros((max_len, 300))
+			x = np.zeros((max_len, dimension))
 			sentence = []
 			tokens = line.strip().split()
 			index = 0
@@ -36,7 +35,7 @@ def read_data(file_path, max_len = 30):
 					break
 			X.append(x)
 			sentences.append(sentence)
-	return np.array(X), 300, sentences
+	return np.array(X), dimension, sentences
 
 def build_generative_model(input_dim, max_len = 30):
 	G = Sequential()
